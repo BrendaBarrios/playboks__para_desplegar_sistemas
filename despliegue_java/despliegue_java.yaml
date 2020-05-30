@@ -1,0 +1,74 @@
+
+# Playbook para la realización del despliegue de una aplicación en java
+
+- name: Servicio de despliegue para aplicación en java
+  hosts: aws
+  remote_user: ubuntu
+  become: True
+  
+  vars:
+    - ubicacion_tomcat: /var/lib/tomcat8/webapps/
+    - ubicacion_sql:   /home/ubuntu/sql/proyecto_java/
+    - db: controlescolar
+    - db_usuario: usercontrolescolar
+    - db_contra: usercontrolescolar123
+
+
+  tasks:
+
+  - name: Instalando requisitos para el sistema
+    apt:
+      name: ["mysql-server","tomcat8","python3-pip","mysql-client"]      
+      state: present
+      update_cache : yes
+  
+  - name: Make sure pymysql is present
+    pip:
+      name: pymysql
+      state: present
+
+  - name: Copiar archivo war 
+    copy: 
+      src: /home/bodhi/Desktop/Deployment/data/proyecto_java/war_proyecto/ControlPeliculas.war
+      dest: "{{ubicacion_tomcat}}"
+
+  - name: Copiar archivo sql
+    copy: 
+      src: /home/bodhi/Desktop/Deployment/data/proyecto_java/war_proyecto
+      dest: "{{ubicacion_sql}}"
+
+
+  - name: Cambiando autenticación para acceso a mysql
+    command:
+      cmd: sudo mysql -u root -proot -e "use mysql;UPDATE user SET authentication_string=PASSWORD('root') WHERE User='root';UPDATE mysql.user SET plugin = 'mysql_native_password' WHERE User='root';flush privileges;"
+
+  - name: Crear base de datos
+    become: yes
+    mysql_db:
+      login_user: root
+      login_password: root
+      name: "{{db}}"
+      state: present
+
+  - name: Creando estructura
+    mysql_db:
+      login_user: root
+      login_password: root
+      name: controlescolar
+      state: import
+      target: /home/ubuntu/sql/proyecto_java/war_proyecto/controlescolar.sql
+
+
+ 
+  - name: Crear usuario
+    become: yes
+    mysql_user:
+      name: "{{ db_usuario}}"
+      login_user: root
+      login_password: root
+      password: "{{  db_contra }}"
+      priv: '{{db}}.*:ALL'
+      host: localhost
+      state: present
+
+
