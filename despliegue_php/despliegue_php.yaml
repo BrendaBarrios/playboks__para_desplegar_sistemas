@@ -1,0 +1,57 @@
+
+# Playbook para la realización del despliegue de una aplicación en php
+
+
+- name: Servicio de despliegue para aplicación php
+  hosts: aws
+  remote_user: ubuntu
+  become: True
+  
+  vars:
+    - ubicacion_proyecto:  /var/www/html/proyecto_php
+    - bd: crud
+    - bd_usuario: root
+    - bd_contra: "root"
+
+  tasks:
+
+  - name: Instalando requisitos para el sistema
+    apt:
+      name: ["apache2","mysql-server","php","php-mysql","libapache2-mod-php","libmysqlclient-dev","python3-pip","mysql-client"]      
+      state: present
+      update_cache : yes
+  
+  - name: Asegurandose que  pymysql esta presente
+    pip:
+      name: pymysql
+      state: present
+
+  - name: Clonar proyecto
+    git: 
+      repo: https://github.com/BrendaBarrios/php-mysql-crud
+      dest: "{{ubicacion_proyecto}}"
+      
+  - name: Cambiando autenticación para acceso a mysql
+    command:
+      cmd: sudo mysql -u root -proot -e "use mysql;UPDATE user SET authentication_string=PASSWORD('root') WHERE User='root';UPDATE mysql.user SET plugin = 'mysql_native_password' WHERE User='root';flush privileges;"
+
+  - name: crear base de datos
+    mysql_db: 
+      name: "{{bd}}"
+      login_password: "{{ bd_contra}}"
+      login_user: root
+      state: present
+      
+  - name: creacion de tablas de la base de datos
+    command:
+      cmd: "mysql -u {{bd_usuario}} -p{{bd_contra}} -e 'source /var/www/html/proyecto_php/database/crud.sql'"
+    
+  
+  - name: Reiniciando apache
+    become: True
+    service:
+      name: apache2
+      state: reloaded
+      
+ 
+
