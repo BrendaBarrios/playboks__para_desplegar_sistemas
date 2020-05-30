@@ -1,0 +1,106 @@
+# Playbook para modulo desplegue django
+---
+
+- name: Servicio de git para desplegar aplicacion en django
+  hosts: aws
+  remote_user: ubuntu
+  become: True
+  
+  vars:
+    - ubicacion_proyecto: /home/ubuntu/proyecto_clonado
+    - bd: todolist
+    - bd_usuario: user
+    - bd_contra: "pass"
+    - bd_contra_p: "root"
+
+  tasks:
+  - name: Instalando requisitos para el sistema
+    apt:
+      name: ["apache2","python-dev","python-virtualenv"," python3-django","mysql-server", "python3-dev", "libmysqlclient-dev", "python3-pip","git","mysql-client", "python3","autoconf","libxml2-dev", "libxslt1-dev", "zlib1g-dev", "libssl-dev", "build-essential","libapache2-mod-wsgi-py3","python-pip"]      
+      state: present
+      update_cache : yes
+  
+  - name: Instalando pymysql
+    pip:
+      name: pymysql
+      state: present
+      
+
+  - name: Clonar proyecto
+    git: 
+      repo: https://github.com/BrendaBarrios/django-todo-app.git
+      dest: /home/ubuntu/proyecto_clonado
+
+  - name: Asegurandose que mysql esta corriendo
+    service:
+      name: mysql
+      state: started
+      enabled: yes
+    become: yes
+
+  - name: Instalando entorno virtual
+    pip:
+      name: virtualenv
+      state: present
+      
+
+  - name: Creando entorno virtual
+    pip:
+      virtualenv: /home/ubuntu/proyecto_clonado/env
+      virtualenv_python: python3.6
+      name:
+        - django
+        - mysqlclient
+      state: present
+
+  - name: Instalando wsgi
+    apache2_module:
+      name: wsgi
+      state: present
+
+  - name: Cambiando autenticación para acceso a mysql
+    command:
+      cmd: sudo mysql -u root -proot -e "use mysql;UPDATE user SET authentication_string=PASSWORD('root') WHERE User='root';UPDATE mysql.user SET plugin = 'mysql_native_password' WHERE User='root';flush privileges;"
+
+  - name: crear base de datos
+    mysql_db: 
+      name: "{{bd}}"
+      state: present
+      login_password: "{{ bd_contra_p }}"
+      login_user: root
+  
+  - name: Crear usuario
+    become: True
+    mysql_user: 
+      name: "{{bd_usuario}}"
+      login_user: root
+      login_password: "{{ bd_contra_p }}"
+      password: "{{ bd_contra }}"
+      priv: '{{bd}}.*:ALL'
+      host: localhost
+      state: present
+
+  - name: Correr migraciones
+    django_manage:
+      app_path: /home/ubuntu/proyecto_clonado/
+      command: migrate
+      virtualenv: /home/ubuntu/proyecto_clonado/env
+
+  - name: Copiando archivo de configuraración sitio de apache
+    become: yes
+    copy:
+      src: despliegue.txt
+      dest: /etc/apache2/sites-available/django_despliegue.conf
+      
+  - name: Habilitando el sitio
+    become: True
+    command: a2ensite django_despliegue.conf
+
+  - name: Reiniciando apache
+    become: yes
+    service:
+      name: apache2
+      state: reloaded
+      
+ 
+
